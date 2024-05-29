@@ -11,7 +11,7 @@ import path from "path";
 // Config
 dotenv.config();
 /** Disables modifying the database, uploading to webdav, and cleaning the temp directory */
-export const DEBUG = process.env.DEBUG ?? true;
+export const DEBUG = process.env.DEBUG ?? false;
 export const PORT = process.env.PORT ?? 3001;
 export const TEMP_DIRECTORY = process.env.TEMP_DIRECTORY ?? "temp";
 export const WEBDAV_URL = process.env.WEBDAV_URL!;
