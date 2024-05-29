@@ -1,3 +1,4 @@
 # whoops
 node_modules/
 .env
+temp/

@@ -1,5 +1,11 @@
-import { sources, Status } from "./lib";
-import { WEBDAV_URL, WEBDAV_USERNAME, WEBDAV_PASSWORD, DEBUG } from "./index";
+import { SOURCES, Status } from "./lib";
+import {
+  WEBDAV_URL,
+  WEBDAV_USERNAME,
+  WEBDAV_PASSWORD,
+  DEBUG,
+  TEMP_DIRECTORY,
+} from "./index";
 
 import axios from "axios";
 import fs from "fs";
@@ -43,21 +49,21 @@ async function downloadSegment(url: string, filename: string) {
 }
 
 interface DownloadSegmentsArguments {
-  channelId: number;
+  channel: string;
   jobUuid: string;
   segmentIdxRange: number[];
 }
 /** Download audio and video segments. Returns the initial video and audio filenames respectively. */
 async function downloadSegments(
-  { channelId, jobUuid, segmentIdxRange }: DownloadSegmentsArguments // (fmt)
+  { channel, jobUuid, segmentIdxRange }: DownloadSegmentsArguments // (fmt)
 ): Promise<string[]> {
-  const urlPrefix = sources[channelId].urlPrefix;
+  const urlPrefix = SOURCES[channel].urlPrefix;
 
   const videoInitUrl = `${urlPrefix}v=pv14/b=5070016/segment.init`;
   const audioInitUrl = `${urlPrefix}a=pa3/al=en-GB/ap=main/b=96000/segment.init`;
 
   const [videoInitFilename, audioInitFilename] = ["video", "audio"].map(
-    (type) => `temp/${jobUuid}/${type}_init.m4s`
+    (type) => `${TEMP_DIRECTORY}/${jobUuid}/${type}_init.m4s`
   );
 
   const videoDownloadJobs = [downloadSegment(videoInitUrl, videoInitFilename)];
@@ -71,12 +77,12 @@ async function downloadSegments(
     // Video job
     // timescale=50, duration=192
     const videoUrl = `${urlPrefix}t=3840/v=pv14/b=5070016/${segmentIdx}.m4s`;
-    const videoFilename = `temp/${jobUuid}/video_${segmentIdx}.m4s`;
+    const videoFilename = `${TEMP_DIRECTORY}/${jobUuid}/video_${segmentIdx}.m4s`;
     videoDownloadJobs.push(downloadSegment(videoUrl, videoFilename));
     // Audio job
     // timescale=50, duration=192
     const audioUrl = `${urlPrefix}t=3840/a=pa3/al=en-GB/ap=main/b=96000/${segmentIdx}.m4s`;
-    const audioFilename = `temp/${jobUuid}/audio_${segmentIdx}.m4s`;
+    const audioFilename = `${TEMP_DIRECTORY}/${jobUuid}/audio_${segmentIdx}.m4s`;
     audioDownloadJobs.push(downloadSegment(audioUrl, audioFilename));
   }
 
@@ -107,9 +113,9 @@ async function combineSegments(
   ].map(([type, initFilename]) => {
     let files = `concat:${initFilename}`;
     for (let number = range[0]; number <= range[1]; number++) {
-      files += `|temp/${jobUuid}/${type}_${number}.m4s`;
+      files += `|${TEMP_DIRECTORY}/${jobUuid}/${type}_${number}.m4s`;
     }
-    return [files, `temp/${jobUuid}/${type}_full.mp4`];
+    return [files, `${TEMP_DIRECTORY}/${jobUuid}/${type}_full.mp4`];
   });
 
   // Concatenate audio and video files simultaneously
@@ -143,16 +149,16 @@ export interface ClipArguments {
   range: number[];
   jobUuid: string;
   client: SupabaseClient;
-  channelId: number;
+  channel: string;
 }
 /** Create a clip */
 export async function clip(
-  { range, jobUuid, client, channelId }: ClipArguments // (fmt)
+  { range, jobUuid, client, channel }: ClipArguments // (fmt)
 ) {
-  const outputFilename = `temp/${jobUuid}/${jobUuid}.mp4`;
+  const outputFilename = `${TEMP_DIRECTORY}/${jobUuid}/${jobUuid}.mp4`;
   try {
     console.info(
-      `Starting clip from channel ${channelId} from ${range[0]}-${range[1]} with UUID ${jobUuid}`
+      `Starting clip from channel ${channel} from ${range[0]}-${range[1]} with UUID ${jobUuid}`
     );
 
     // Helper to change the status
@@ -171,7 +177,7 @@ export async function clip(
           rec_end: range[1],
           status: Status["Initialising"],
           user: 1, // todo
-          channel: channelId,
+          channel: SOURCES[channel].id,
         },
       ]);
 
@@ -184,11 +190,11 @@ export async function clip(
 
     // Download video and audio segments
     await changeStatus(Status["Downloading"]);
-    if (!fs.existsSync(`temp/${jobUuid}`)) {
-      fs.mkdirSync(`temp/${jobUuid}`, { recursive: true });
+    if (!fs.existsSync(`${TEMP_DIRECTORY}/${jobUuid}`)) {
+      fs.mkdirSync(`${TEMP_DIRECTORY}/${jobUuid}`, { recursive: true });
     }
     const [videoInitFilename, audioInitFilename] = await downloadSegments({
-      channelId,
+      channel,
       jobUuid,
       segmentIdxRange,
     });
@@ -211,14 +217,14 @@ export async function clip(
     // Safety: The output filename cannot contain any special characters (UUIDv4-derived)
     if (!DEBUG)
       execSync(
-        `curl -T '${outputFilename}' -u ${WEBDAV_USERNAME}:${WEBDAV_PASSWORD} ${WEBDAV_URL}/bbcd/${outputFilename}`
+        `curl -T '${outputFilename}' -u ${WEBDAV_USERNAME}:${WEBDAV_PASSWORD} ${WEBDAV_URL}/bbcd/${jobUuid}.mp4`
       );
     await changeStatus(Status["Complete"]);
   } finally {
     // Cleanup
     if (!DEBUG) {
       fs.unlinkSync(outputFilename);
-      fs.rmSync(`temp/${jobUuid}`, { recursive: true });
+      fs.rmSync(`${TEMP_DIRECTORY}/${jobUuid}`, { recursive: true });
     }
   }
 }

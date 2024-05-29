@@ -10,11 +10,10 @@ import path from "path";
 
 // Config
 dotenv.config();
-/** Disables modifying the database and uploading to webdav */
-export const DEBUG = true;
+/** Disables modifying the database, uploading to webdav, and cleaning the temp directory */
+export const DEBUG = process.env.DEBUG ?? true;
 export const PORT = process.env.PORT ?? 3001;
-export const VIDEOS_SERVE_DIRECTORY =
-  process.env.VIDEOS_DIRECTORY ?? "z:\\bbcd\\bbcd";
+export const TEMP_DIRECTORY = process.env.TEMP_DIRECTORY ?? "temp";
 export const WEBDAV_URL = process.env.WEBDAV_URL!;
 export const WEBDAV_USERNAME = process.env.WEBDAV_USERNAME!;
 export const WEBDAV_PASSWORD = process.env.WEBDAV_PASSWORD!;
@@ -29,11 +28,11 @@ app.use(bodyParser.json());
 
 /** Create a clip */
 app.post("/downloadVideo", async (req, res) => {
-  const [startTimestamp, endTimestamp, channelId] = [
+  const [startTimestamp, endTimestamp] = [
     req.body.startTimestamp,
     req.body.endTimestamp,
-    req.body.channel,
   ].map((int) => parseInt(int, 10));
+  const channel = req.body.channel;
 
   const jobId = uuidv4();
   res.send(jobId);
@@ -42,23 +41,10 @@ app.post("/downloadVideo", async (req, res) => {
     range: [startTimestamp, endTimestamp],
     jobUuid: jobId,
     client: sb_client,
-    channelId,
+    channel,
   })
     .then(() => console.log(`Job \`${jobId}\` finished`))
     .catch(console.error);
-});
-
-/** Download an existing clip from the local filesystem,
- * wherein it's
- */
-app.get("/download/:jobId", (req, resp) => {
-  const filename = `${req.params.jobId!}.mp4`;
-  const videoPath = path.join(VIDEOS_SERVE_DIRECTORY, filename);
-  fs.access(videoPath, fs.constants.F_OK | fs.constants.R_OK, (err) => {
-    if (err) return resp.status(404).send("Video not found");
-    const videoStream = fs.createReadStream(videoPath);
-    videoStream.pipe(resp);
-  });
 });
 
 app.listen(PORT, () => {
