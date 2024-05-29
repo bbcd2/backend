@@ -1,9 +1,14 @@
 export enum Status {
+  // OK statuses
   "Initialising" = 1,
   "Downloading" = 2,
   "Encoding" = 3,
   "Uploading Result" = 4,
   "Complete" = 5,
+  // Error statuses
+  "Downloading Failed" = 10,
+  "Encoding Failed" = 11,
+  "Uploading Failed" = 12,
 }
 
 interface SourceEntry {

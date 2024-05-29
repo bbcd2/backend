@@ -190,36 +190,51 @@ export async function clip(
 
     // Download video and audio segments
     await changeStatus(Status["Downloading"]);
-    if (!fs.existsSync(`${TEMP_DIRECTORY}/${jobUuid}`)) {
-      fs.mkdirSync(`${TEMP_DIRECTORY}/${jobUuid}`, { recursive: true });
+    try {
+      if (!fs.existsSync(`${TEMP_DIRECTORY}/${jobUuid}`)) {
+        fs.mkdirSync(`${TEMP_DIRECTORY}/${jobUuid}`, { recursive: true });
+      }
+      var [videoInitFilename, audioInitFilename] = await downloadSegments({
+        channel,
+        jobUuid,
+        segmentIdxRange,
+      });
+    } catch (e) {
+      await changeStatus(Status["Downloading Failed"]);
+      throw e;
     }
-    const [videoInitFilename, audioInitFilename] = await downloadSegments({
-      channel,
-      jobUuid,
-      segmentIdxRange,
-    });
 
     // Combine audio and video segments
     await changeStatus(Status["Encoding"]);
-    await combineSegments({
-      filenames: {
-        videoInit: videoInitFilename,
-        audioInit: audioInitFilename,
-        output: outputFilename,
-      },
-      range: [segmentIdxRange[0], segmentIdxRange[1]],
-      jobUuid: jobUuid,
-    });
+    try {
+      await combineSegments({
+        filenames: {
+          videoInit: videoInitFilename,
+          audioInit: audioInitFilename,
+          output: outputFilename,
+        },
+        range: [segmentIdxRange[0], segmentIdxRange[1]],
+        jobUuid: jobUuid,
+      });
+    } catch (e) {
+      await changeStatus(Status["Encoding Failed"]);
+      throw e;
+    }
 
     // Upload
     await changeStatus(Status["Uploading Result"]);
     // Upload the MP4 file to the WebDAV server
     // Safety: The output filename cannot contain any special characters (UUIDv4-derived)
-    if (!DEBUG)
-      execSync(
-        `curl -T '${outputFilename}' -u ${WEBDAV_USERNAME}:${WEBDAV_PASSWORD} ${WEBDAV_URL}/bbcd/${jobUuid}.mp4`
-      );
-    await changeStatus(Status["Complete"]);
+    try {
+      if (!DEBUG)
+        execSync(
+          `curl -T '${outputFilename}' -u ${WEBDAV_USERNAME}:${WEBDAV_PASSWORD} ${WEBDAV_URL}/bbcd/${jobUuid}.mp4`
+        );
+      await changeStatus(Status["Complete"]);
+    } catch (e) {
+      await changeStatus(Status["Uploading Failed"]);
+      throw e;
+    }
   } finally {
     // Cleanup
     if (!DEBUG) {
