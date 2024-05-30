@@ -2,13 +2,17 @@ export enum Status {
   // OK statuses
   "Initialising" = 1,
   "Downloading" = 2,
-  "Encoding" = 3,
-  "Uploading Result" = 4,
-  "Complete" = 5,
+  "Combining" = 3,
+  "Encoding" = 4,
+  "Uploading Result" = 5,
+  "Complete" = 6,
+  /** Separation between OK statuses and error statuses */
+  "_SENTINEL_MAX_OK" = 7,
   // Error statuses
   "Downloading Failed" = 10,
-  "Encoding Failed" = 11,
-  "Uploading Failed" = 12,
+  "Combining Failed" = 11,
+  "Encoding Failed" = 12,
+  "Uploading Failed" = 13,
 }
 
 interface SourceEntry {

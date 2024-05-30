@@ -209,7 +209,7 @@ export async function clip(
 
     // Combine audio and video segments
     console.debug(`${jobUuid}: Combining`);
-    await changeStatus(Status.Encoding);
+    await changeStatus(Status.Combining);
     try {
       await combineSegments({
         filenames: {
