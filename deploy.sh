@@ -27,5 +27,5 @@ for server in "${SERVERS[@]}"; do
         rm ${DEPLOY_ARCHIVE} || exit 1; \
         sed -i \"s/DEBUG=true/DEBUG=false/g\" .env;\
         npm i || exit 1; \
-        pm2 restart frontend" || error "deploying to ${server}"
+        pm2 restart backend" || error "deploying to ${server}"
 done
