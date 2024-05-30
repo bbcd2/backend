@@ -12,6 +12,7 @@ import path from "path";
 dotenv.config();
 /** Disables modifying the database, uploading to webdav, and cleaning the temp directory */
 export const DEBUG = false;
+export const VIDEO_DOWNLOAD_JOB_COUNT = 5;
 export const PORT = process.env.PORT ?? 3001;
 export const TEMP_DIRECTORY = process.env.TEMP_DIRECTORY ?? "temp";
 export const WEBDAV_URL = process.env.WEBDAV_URL!;
@@ -33,18 +34,22 @@ app.post("/downloadVideo", async (req, res) => {
     req.body.endTimestamp,
   ].map((int) => parseInt(int, 10));
   const channel = req.body.channel;
+  const encode = !!req.body.encode;
 
-  const jobId = uuidv4();
-  res.send(jobId);
+  const jobUuid = uuidv4();
+  res.send(jobUuid);
 
-  clip({
-    range: [startTimestamp, endTimestamp],
-    jobUuid: jobId,
-    client: sb_client,
-    channel,
-  })
-    .then(() => console.log(`Job \`${jobId}\` finished`))
-    .catch(console.error);
+  try {
+    await clip({
+      range: [startTimestamp, endTimestamp],
+      jobUuid: jobUuid,
+      client: sb_client,
+      channel,
+      encode,
+    });
+  } catch (e) {
+    console.error(`${jobUuid} failed: ${e}`);
+  }
 });
 
 app.listen(PORT, () => {

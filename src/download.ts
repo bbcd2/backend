@@ -5,6 +5,7 @@ import {
   WEBDAV_PASSWORD,
   DEBUG,
   TEMP_DIRECTORY,
+  VIDEO_DOWNLOAD_JOB_COUNT,
 } from "./index";
 
 import axios from "axios";
@@ -39,12 +40,12 @@ async function downloadSegment(url: string, filename: string) {
       responseType: "arraybuffer",
     })
     .catch((e) => {
-      throw new Error(`Downloading segment failed: ${e}`);
+      throw Error(`Downloading segment failed: ${e}`);
     });
   try {
     fs.writeFileSync(filename, resp.data);
   } catch (e) {
-    throw new Error(`Saving segment failed: ${e}`);
+    throw Error(`Saving segment failed: ${e}`);
   }
 }
 
@@ -86,10 +87,15 @@ async function downloadSegments(
     audioDownloadJobs.push(downloadSegment(audioUrl, audioFilename));
   }
 
-  await Promise.all([
-    sequentialPromiseResolving(videoDownloadJobs),
-    sequentialPromiseResolving(audioDownloadJobs),
-  ]);
+  // Split video download jobs into 3 jobs
+  const jobs: Promise<void>[][] = [];
+  for (let i = 0; i < VIDEO_DOWNLOAD_JOB_COUNT; i++) jobs.push([]);
+  for (let idx = 0; idx < videoDownloadJobs.length; idx++)
+    jobs[idx % jobs.length].push(videoDownloadJobs[idx]);
+
+  const sequentialJobs = jobs.map((jobs) => sequentialPromiseResolving(jobs));
+  sequentialJobs.push(sequentialPromiseResolving(audioDownloadJobs));
+  await Promise.all(sequentialJobs);
 
   return [videoInitFilename, audioInitFilename];
 }
@@ -98,10 +104,11 @@ interface CombineSegmentsArguments {
   filenames: { audioInit: string; videoInit: string; output: string };
   range: number[];
   jobUuid: string;
+  encode: boolean;
 }
 /** Combine audio and video segments */
 async function combineSegments(
-  { filenames, range, jobUuid }: CombineSegmentsArguments // (fmt)
+  { filenames, range, jobUuid, encode }: CombineSegmentsArguments // (fmt)
 ) {
   // Find files to concatenate
   const [
@@ -140,7 +147,9 @@ async function combineSegments(
   // Splice together audio and video
   await new Promise((r) => setTimeout(r, 1000));
   execSync(
-    `ffmpeg -i ${concatenatedVideoFilename} -i ${concatenatedAudioFilename} -c:v libx264 -c:a copy ${filenames.output}`,
+    `ffmpeg -i ${concatenatedVideoFilename} -i ${concatenatedAudioFilename} -c:v ${
+      encode ? "libx264" : "copy"
+    } -c:a copy ${filenames.output}`,
     { stdio: [undefined, undefined, undefined] }
   );
 
@@ -154,15 +163,16 @@ export interface ClipArguments {
   jobUuid: string;
   client: SupabaseClient;
   channel: string;
+  encode: boolean;
 }
 /** Create a clip */
 export async function clip(
-  { range, jobUuid, client, channel }: ClipArguments // (fmt)
+  { range, jobUuid, client, channel, encode }: ClipArguments // (fmt)
 ) {
   const outputFilename = `${TEMP_DIRECTORY}/${jobUuid}/${jobUuid}.mp4`;
   try {
     console.info(
-      `Starting clip from channel ${channel} from ${range[0]}-${range[1]} with UUID ${jobUuid}`
+      `${jobUuid}: Starting clip from channel \"${channel}\" from ${range[0]}-${range[1]}`
     );
 
     // Helper to change the status
@@ -192,7 +202,7 @@ export async function clip(
 
     // Download video and audio segments
     await changeStatus(Status.Downloading);
-    console.debug(`${jobUuid}: Downloading`);
+    console.warn(`${jobUuid}: Downloading`);
     try {
       if (!fs.existsSync(`${TEMP_DIRECTORY}/${jobUuid}`)) {
         fs.mkdirSync(`${TEMP_DIRECTORY}/${jobUuid}`, { recursive: true });
@@ -208,8 +218,8 @@ export async function clip(
     }
 
     // Combine audio and video segments
-    console.debug(`${jobUuid}: Combining`);
-    await changeStatus(Status.Combining);
+    console.warn(`${jobUuid}: ${!encode ? "Combining" : "Encoding"}`);
+    await changeStatus(!encode ? Status.Combining : Status.Encoding);
     try {
       await combineSegments({
         filenames: {
@@ -219,9 +229,12 @@ export async function clip(
         },
         range: [segmentIdxRange[0], segmentIdxRange[1]],
         jobUuid: jobUuid,
+        encode,
       });
     } catch (e) {
-      await changeStatus(Status["Encoding Failed"]);
+      await changeStatus(
+        !encode ? Status["Combining Failed"] : Status["Encoding Failed"]
+      );
       throw e;
     }
 
@@ -231,7 +244,7 @@ export async function clip(
     // Safety: The output filename cannot contain any special characters (UUIDv4-derived)
     try {
       const uploadCommand = `curl -T '${outputFilename}' -u ${WEBDAV_USERNAME}:${WEBDAV_PASSWORD} ${WEBDAV_URL}/bbcd/${jobUuid}.mp4`;
-      console.debug(`${jobUuid}: Uploading with ${uploadCommand}`);
+      console.warn(`${jobUuid}: Uploading`);
       if (!DEBUG)
         execSync(uploadCommand, { stdio: [undefined, undefined, undefined] });
       await changeStatus(Status.Complete);
@@ -239,11 +252,15 @@ export async function clip(
       await changeStatus(Status["Uploading Failed"]);
       throw e;
     }
+    console.info(`${jobUuid}: Finished`);
   } finally {
+    console.warn(`${jobUuid}: Cleaning up`);
     // Cleanup
     if (!DEBUG) {
-      fs.unlinkSync(outputFilename);
-      fs.rmSync(`${TEMP_DIRECTORY}/${jobUuid}`, { recursive: true });
+      try {
+        fs.unlinkSync(outputFilename);
+        fs.rmSync(`${TEMP_DIRECTORY}/${jobUuid}`, { recursive: true });
+      } catch (e) {}
     }
   }
 }
