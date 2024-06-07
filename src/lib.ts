@@ -51,4 +51,6 @@ export const SOURCES: {[key:string]: SourceEntry} = {
   "BBC PARLIAMENT": {id: 27, urlPrefix: "https://vs-cmaf-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_parliament/"},
   "BBC ALBA": {id: 28, urlPrefix: "https://vs-cmaf-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_alba/"},
   "S4C": {id: 29, urlPrefix: "https://vs-cmaf-pushb-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:s4cpbs/"},
+  "BBC STREAM 51 HD": {id: 30, urlPrefix: "https://ve-cmaf-pushb-uk.live.cf.md.bbci.co.uk/x=4/i=urn:bbc:pips:service:ww_bbc_stream_051/" },
+  "BBC STREAM 52 HD": {id: 31, urlPrefix: "https://ve-cmaf-pushb-uk.live.fastly.md.bbci.co.uk/x=4/i=urn:bbc:pips:service:uk_bbc_stream_052/pc_hd_abr_v2.mpd" }
 }
