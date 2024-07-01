@@ -7,7 +7,7 @@ error() {
 
 # SSH_KEY="-i ~/.ssh/sheepy.moe"
 
-SERVERS=("root@bbcd2" "server@vell");
+SERVERS=("root@bbcd2" "server@vell" "server@hp260");
 WORKING_DIRECTORY="~/backend"  # full path
 DEPLOY_ARCHIVE="deploy.tar.xz" # no directory depth
 CLEAR_COMMAND="find . -maxdepth 1 ! -name '${DEPLOY_ARCHIVE}' ! -name node_modules ! -name .env -exec rm -rf {} +"
